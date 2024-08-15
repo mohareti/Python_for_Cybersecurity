@@ -1,0 +1,81 @@
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse, urljoin
+import networkx as nx
+import matplotlib.pyplot as plt
+from collections import deque
+
+def get_subdomains(url, base_domain):
+    try:
+        response = requests.get(url, timeout=5)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        links = soup.find_all('a', href=True)
+
+        subdomains = set()
+        for link in links:
+            parsed = urlparse(urljoin(url, link['href']))
+            if parsed.netloc.endswith(base_domain) and parsed.netloc != base_domain:
+                subdomains.add(parsed.netloc)
+
+        return subdomains
+    except:
+        return set()
+
+def explore_subdomains(start_url, max_depth=5):
+    base_domain = urlparse(start_url).netloc
+    G = nx.DiGraph()
+    G.add_node(base_domain)
+
+    queue = deque([(base_domain, 0)])
+    visited = set()
+
+    while queue:
+        current_domain, depth = queue.popleft()
+
+        if depth >= max_depth:
+            continue
+
+        if current_domain in visited:
+            continue
+
+        visited.add(current_domain)
+        url = f"http://{current_domain}"
+        subdomains = get_subdomains(url, base_domain)
+
+        for subdomain in subdomains:
+            G.add_edge(current_domain, subdomain)
+            if subdomain not in visited:
+                queue.append((subdomain, depth + 1))
+
+    return G
+
+def visualize_subdomains(G):
+    plt.figure(figsize=(20, 12))
+    pos = nx.spring_layout(G)
+    nx.draw(G, pos, with_labels=True, node_color='lightblue',
+            node_size=3000, font_size=8, font_weight='bold',
+            arrows=True, edge_color='gray')
+
+    # Add labels to nodes
+    labels = nx.get_node_attributes(G, 'name')
+    nx.draw_networkx_labels(G, pos, labels, font_size=8)
+
+    plt.title("Subdomain Connections", fontsize=16)
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+def main(start_url):
+    print(f"Exploring subdomains for {start_url}...")
+    G = explore_subdomains(start_url)
+
+    print("\nUnique subdomains found:")
+    for node in G.nodes():
+        print(node)
+
+    print("\nVisualizing subdomain connections...")
+    visualize_subdomains(G)
+
+if __name__ == "__main__":
+    start_url = input("enter the domain:")
+    main(start_url)
